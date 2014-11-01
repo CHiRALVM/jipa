@@ -101,10 +101,8 @@ public class NPAFile {
 			int[] buffer = fr.readUnsignedBytes(size);
 			System.out.println("Buffer data for "+entry.getName());
 			for (int i = 0;i < buffer.length;i++) {
-				System.out.print(Integer.toHexString(buf[i])+" ");
 				buf[i] = (byte) buffer[i];
 			}
-			System.out.print("\n");
 		}
 		
 		if (compress == 1) {
@@ -247,7 +245,8 @@ public class NPAFile {
 	 */
 	public NPAEntry getEntryByFileName(String name) {
 		for (NPAEntry entry : loadedEntries) {
-			if (entry.getOriginalName().equalsIgnoreCase(name)) {
+			System.out.println(entry.getName()+"?="+name);
+			if (entry.getName().equalsIgnoreCase(name) || entry.getOriginalName().equalsIgnoreCase(name)) {
 				return entry;
 			}
 		}
