@@ -1,12 +1,14 @@
 package org.chiralvm.libraries.NPAFormat;
 
 import java.io.BufferedInputStream;
+import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
@@ -23,6 +25,7 @@ public class NPAFile {
 	private EncryptionManager enc;
 	private CReader hr,fr;
 	private boolean extensive=false,silent=true;
+	private ArrayList<StackTraceElement[]> exceptionst = new ArrayList<>();
 	private ArrayList<NPAEntry> loadedEntries = new ArrayList<NPAEntry>();
 	private EncryptionKey encryptionKey;
 	private int k1,k2,compress,encrypt,totalCount,folderCount,fileCount,_null,start; //Header information
@@ -58,7 +61,8 @@ public class NPAFile {
 	 * Extracts single file
 	 * 
 	 * @param entry entry to be extracted
-	 * @return dst destination path (e.g. 'a/abc.txt')
+	 * @param dst filename (e.g. 'abc.txt')
+	 * @return dst destination path (e.g. 'abc.txt')
 	 */
 	public boolean extractFile(NPAEntry entry,String dst) {
 		try {
@@ -99,7 +103,6 @@ public class NPAFile {
 			
 		} else {
 			int[] buffer = fr.readUnsignedBytes(size);
-			System.out.println("Buffer data for "+entry.getName());
 			for (int i = 0;i < buffer.length;i++) {
 				buf[i] = (byte) buffer[i];
 			}
@@ -117,8 +120,10 @@ public class NPAFile {
 					int c = inf.inflate(uc_buf);
 					out.write(uc_buf,0,c);
 				} catch (DataFormatException e) {
-					System.out.println("Error while uncompressing!");
+					if (!silent) System.out.println("Error while uncompressing!");
 					e.printStackTrace();
+					exceptionst.add(e.getStackTrace());
+					return false;
 				}
 			}
 			
@@ -138,6 +143,7 @@ public class NPAFile {
 		} catch (IOException io) {
 			if (!silent) System.out.println("Error while reading "+entry.getName()+"!");
 			if (!silent && extensive) io.printStackTrace();
+			exceptionst.add(io.getStackTrace());
 			return false;
 		}
 		return true;
@@ -161,6 +167,17 @@ public class NPAFile {
 	}
 	
 	/**
+	 * Get Exceptions
+	 * 
+	 * @return Returns all exceptions that occured
+	 */
+	
+	public ArrayList<StackTraceElement[]> getExceptions() {
+		return exceptionst;
+	}
+	
+	
+	/**
 	 * Extracts an single entry from the NPA file
 	 * 
 	 * @param entry The entry you want to extract
@@ -169,21 +186,21 @@ public class NPAFile {
 	 */
 	public boolean extractEntry(NPAEntry entry,String dst) {
 		if (encryptionKey == null && encrypt == 1) {
-			System.out.println("Encrypted archive;No Key given");
+			if (!silent) System.out.println("Encrypted archive;No Key given");
 			return false;
 		}
 		
 		if (encryptionKey != null && encrypt == 0) {
-			System.out.println("Non-encrypted archive;Encryption key given");
+			if (!silent) System.out.println("Non-encrypted archive;Encryption key given");
 		}
 		
 		if (new File(dst).exists()) {
 				if (!new File(dst).canWrite()) {
-					System.out.println("Can't write file!");
+					if (!silent) System.out.println("Can't write file!");
 					return false;
 				}
 				if (!new File(dst).isDirectory()) {
-					System.out.println("Path is no directory!");
+					if (!silent) System.out.println("Path is no directory!");
 					return false;
 				}
 		}
@@ -202,7 +219,7 @@ public class NPAFile {
 			}
 			if (!silent && extensive) System.out.println(path+entry.getName());
 
-		System.out.println("Done.");
+			if (!silent) System.out.println("Done.");
 		return true;
 	}
 	
@@ -220,14 +237,11 @@ public class NPAFile {
 			if (entry.isFile()) files++;
 			if (entry.isDirectory()) dirs++;
 			
-			boolean before = silent;
-			this.setSilentMode(true);
 			if (!extractEntry(entry,dst)) {
 				return false;
 			}
-			this.setSilentMode(before);
 			
-			if (!silent && extensive) { System.out.println(entry.getName()+" "+(entry.isFile() ? new BigDecimal(((double)(files+dirs)/(double)loadedEntries.size())*100).setScale(1, BigDecimal.ROUND_HALF_UP).doubleValue()+"%" : "DIR")); } else { System.out.print("."); }
+			if (!silent && extensive) { System.out.println(entry.getName()+" "+(entry.isFile() ? new BigDecimal(((double)(files+dirs)/(double)loadedEntries.size())*100).setScale(1, BigDecimal.ROUND_HALF_UP).doubleValue()+"%" : "DIR")); }
 		}
 		
 		if (dirs != 1) { System.out.println("\n"+files+" file(s) and "+dirs+" directories.\n"); } else { System.out.println("\n"+files+" file(s) and "+dirs+" directory.\n"); }
@@ -240,12 +254,11 @@ public class NPAFile {
 	/**
 	 * Get an NPAEntry by filename
 	 * 
-	 * @param name filename (Note: Its comparing the original names (e.g. dm55/8000510b02.ogg )
+	 * @param name filename (Note: Its comparing the file name and path (e.g. dm55/8000510b02.ogg )
 	 * @return entry with desired name
 	 */
 	public NPAEntry getEntryByFileName(String name) {
 		for (NPAEntry entry : loadedEntries) {
-			System.out.println(entry.getName()+"?="+name);
 			if (entry.getName().equalsIgnoreCase(name) || entry.getOriginalName().equalsIgnoreCase(name)) {
 				return entry;
 			}
@@ -312,6 +325,7 @@ public class NPAFile {
 		} catch (IOException io) {
 			if (!silent && extensive) io.printStackTrace();
 			if (!silent) System.out.println("An IO Exception occured.");
+			exceptionst.add(io.getStackTrace());
 			return false;
 		}
 	}
@@ -377,6 +391,7 @@ public class NPAFile {
 			
 			} catch(IOException io) {
 				if (!silent) System.out.println("IO Exception occured while parsing file: "+i);
+				exceptionst.add(io.getStackTrace());
 				return false;
 			}
 			
@@ -438,7 +453,7 @@ public class NPAFile {
 	
 	private void addEntry(String path,String name,boolean isFile,int curid,int subdir) {
 		NPAEntry entry = new NPAEntry();
-		String origname = new File(basedir).toURI().relativize(new File(path).toURI()).getPath().replaceAll(File.separator, "\\\\");
+		String origname = new File(basedir).toURI().relativize(new File(path).toURI()).getPath().replaceAll(File.separator.replace("\\", "\\\\"), "\\\\\\\\");
 		
 		//Directory shouldn't end with a \
 		if (origname.endsWith("\\")) origname = origname.substring(0, origname.length()-1);
@@ -469,6 +484,7 @@ public class NPAFile {
 				} catch (IOException io) {
 					if (!silent && extensive) io.printStackTrace();
 					if (!silent) System.out.println("IOException occured :/");
+					exceptionst.add(io.getStackTrace());
 				}
 		} else {
 			if (isFile) entry.setCSize((int) new File(path).length());
@@ -485,7 +501,8 @@ public class NPAFile {
 			start += entry.getOriginalName().getBytes("SJIS").length;
 		} catch (UnsupportedEncodingException e) {
 			if (!silent && extensive) e.printStackTrace();
-			if (!silent) System.out.println("You're f*cked! SJIS is not supported");
+			if (!silent) System.out.println("SJIS is not supported");
+			exceptionst.add(e.getStackTrace());
 		}
 		
 		if (totalCount > 0) {
@@ -525,12 +542,12 @@ public class NPAFile {
 	public boolean create(String src,boolean comp) {
 		start = 0;
 		
-		System.out.println("Creating archive "+file.getName()+"...");
+		if (!silent) System.out.println("Creating archive "+file.getName()+"...");
 		
 		basedir = src;
 		
 	    //Parse directory (recrusive)
-		System.out.print("Scanning directory structure\nMight take a while\n");
+		if (!silent) System.out.print("Scanning directory structure\nMight take a while\n");
 	    parseDirectory(new File(src));
 		
 		//Preparing header Values
@@ -542,6 +559,11 @@ public class NPAFile {
 	    start += totalCount*0x15;
 		if (enc == null) enc = new EncryptionManager(encryptionKey,k1,k2);
 	    
+		if (file.exists()) {
+			if (!silent) System.out.println("File already exists");
+			return false;
+		}
+		
 	    //Converting Header values into bytes
 	    byte[] npaHead = new byte[] {78,80,65,1,0,0,0}; //NPA\x01\x00\x00\x00 encoded.
 	    byte[] npaKey1 = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(k1).array();
@@ -556,11 +578,11 @@ public class NPAFile {
 	    npaEncrypt = 0;
 	    npaCompress = (byte)compress;
 	    npaEncrypt = (byte)encrypt;
-	    	    
+	   
 	    try {
 			DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
 			
-			System.out.println("Writing the archive header");
+			if (!silent) System.out.println("Writing the archive header");
 			
 			//Writing the NPA Header
 			dos.write(npaHead); //7 bytes
@@ -574,7 +596,7 @@ public class NPAFile {
 			dos.write(npaNull); //8 bytes
 			dos.write(npaStart); //4 bytes
 			
-			System.out.println("Writing entries");
+			if (!silent) System.out.println("Writing entries");
 			
 			//Writing the file headers
 			for (int i = 0;i < npaEntries.size();i++) {
@@ -641,11 +663,58 @@ public class NPAFile {
 		} catch (FileNotFoundException e) {
 			if (!silent) System.out.println("Error while writing archive: Couldn't locate file.");
 			e.printStackTrace();
+			exceptionst.add(e.getStackTrace());
 			return false;
 		} catch (IOException e) {
 			if (!silent) System.out.println("Error while writing file: Failed to create file.");
 			e.printStackTrace();
+			exceptionst.add(e.getStackTrace());
 			return false;
 		}
+	}
+	
+	/**
+	 * Create error log
+	 * 
+	 * @param dst Error log
+	 * @return exit code
+	 */
+	
+	public boolean createErrorLog(String filename,String introStr) {
+		File file = new File(filename);
+		
+		if (file.exists()) {
+			System.out.println("Can't create "+filename+": Already exists");
+			return false;
+		}
+		if (!file.canWrite()) {
+			System.out.println("Can't create "+filename+": Not allowed to write");
+			return false;
+		}
+		
+		try {
+		
+		BufferedWriter bw = new BufferedWriter(new FileWriter(file));
+		
+		bw.write(introStr+"\n\n");
+		
+		bw.write("Exceptions:\n\n");
+		for (int i = 0;i < exceptionst.size();i++) {
+			bw.write(i+":\n");
+			for (StackTraceElement element : exceptionst.get(i)) {
+				bw.write(element.getMethodName()+" ("+element.getFileName()+":"+element.getLineNumber()+")\n");
+			}
+		}
+		
+		bw.flush();
+		bw.close();
+		
+		} catch (IOException io) {
+			System.out.println("Failed to write error log.");
+			io.printStackTrace();
+			return false;
+		}
+		
+		return true;
 	}
 }

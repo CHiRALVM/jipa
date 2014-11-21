@@ -10,10 +10,13 @@ import org.chiralvm.libraries.NPAFormat.NPAEntry;
 import org.chiralvm.libraries.NPAFormat.NPAFile;
 import org.chiralvm.libraries.NPAFormat.NPALibrary;
 
+
 public class Main {
+	public final static String VERSION = "v0.1.1";
+	
 	public static void main(String[] args) throws UnsupportedEncodingException {
 		
-		out("jipa 0.1.0 by spycrab0\nNipa rewritten in Java with some extra features.\n");
+		out("jipa "+VERSION+" by spycrab0\nNipa rewritten in Java with some extra features.\n");
 		out("Using NPALibrary v"+NPALibrary.VERSION+" (API: v"+NPALibrary.API_VERSION+")\n\n");
 		out("This program is based on docs and source code provided by Moogy (http://tsukuru.info/nipa/)\nThis program is licensed under the GNU General Public License v3.\n\n");
 		
@@ -48,6 +51,15 @@ public class Main {
 					System.exit(1);
 				}
 				extractNPA(args[1],null);
+				return;
+			}
+			
+			if (args[0].equals("-xf")) {
+				if (args.length != 3) {
+					out("Invalid argument count.\nSee -h for further help.\n");
+					System.exit(1);
+				}
+				extractSingleFile(args[1],args[2],null);
 				return;
 			}
 			
@@ -96,6 +108,15 @@ public class Main {
 				return;
 			}
 			
+			if (args[0].equals("-xfg")) {
+				if (args.length != 3 && args.length != 4) {
+					out("Invalid argument count.\nSee -h for further help.\n");
+					System.exit(1);
+				}
+				extractSingleFile(args[1],args[2],(args.length == 3 ? args[2] : "ChaosHead"));
+				return;
+			}
+			
 			System.out.println("Unknown argument.\nSee -h for further help.\n");
 			showHelp();
 			System.exit(1);
@@ -107,9 +128,63 @@ public class Main {
 	}
 	
 	public static void showHelp() {
-		out("Usage:\n\nGeneral\n-h - Displays this information.\n\nInformation\n-i (file) - Show header information\n-ia (file) -Show ALL header information\n-l (file) - List contents.\n-lg [file] (id) - List contents of an encrypted archive. Default id is ChaosHead.\n\nExtraction\n-x (file) - Extract NPA archive\n-xg (file) [id] - Extract encrypted archive. Default id is ChaosHead.\n\nCreation\n-c (dir) (file) - Turn the contents of a folder into an archive\n-cz (dir) (file) - Turn the contents of a folder into an compressed archive.\n\nExamples:\n-x nss.npa - Extracts nss.npa into the folder \"nss\"\n-xg nss.npa MuramasaTr\n\nList of available Encryptions:\n\nGame - ID\n\n");
+		out("Usage:\n\nGeneral\n-h - Displays this information.\n\nInformation\n-i (archive) - Show header information\n-ia (archive) -Show ALL header information\n-l (archive) - List contents.\n-lg (archive) [id] - List contents of an encrypted archive. Default id is ChaosHead.\n\nExtraction\n-x (archive) - Extract NPA archive\n-xf (archive) (file) - Extract single file from archive\n-xg (archive) [id] - Extract encrypted archive. Default id is ChaosHead.\n-xfg (archive) (file) [id] - Extract single file from encrypted archive. Default id is ChaosHead.\n\nCreation\n-c (dir) (archive) - Turn the contents of a folder into an archive\n-cz (dir) (archive) - Turn the contents of a folder into an compressed archive.\n\nExamples:\n-x nss.npa - Extracts nss.npa into the folder \"nss\"\n-xg nss.npa MuramasaTr - Extracts encrypted archive nss.npa into the older \"nss\"\n\nList of available Encryptions:\n\nGame - ID\n\n");
 		for (Entry<String,String> entry : EncryptionKey.getIDDescriptions().entrySet()) {
 			out(entry.getKey()+" - "+entry.getValue()+"\n");
+		}
+	}
+	
+	private static void errorHandler(NPAFile file) {
+		if (file.getExceptions().size() != 0) {
+			System.out.println("Writing exceptions to error.log");
+			file.createErrorLog("error.log", "Nipa v"+VERSION+" "+NPALibrary.VERSION+" (API: v"+NPALibrary.API_VERSION+")");
+		}
+	}
+	
+	private static void extractSingleFile(String filename,String archivefile,String encryption) {
+		NPAFile file;
+
+		if (encryption == null) { file = new NPAFile(new File(filename)); } else { file = new NPAFile(new File(filename),EncryptionKey.valueOf(encryption)); }
+		
+		if (encryption == null) { file = new NPAFile(new File(filename)); } else { file = new NPAFile(new File(filename),EncryptionKey.valueOf(encryption)); }
+		
+		file.setExtensiveMode(false);
+		file.setSilentMode(false);
+		
+		if (!file.readHeader()) {
+			out("Error: Couldn't read npa header\nExiting.\n");
+			errorHandler(file);
+			System.exit(1);
+		} else {
+			out("Successfully read NPA header.\n");
+		}
+		
+		file.setSilentMode(true);
+		if(!file.readAllEntries()) {
+			out("Error: Couldn't read file header\nExiting.\n");
+			errorHandler(file);
+			System.exit(1);
+		} else {
+			out("Successfully read "+file.getLoadedEntries().size()+" fileheaders.\n");
+		}
+		
+		file.setSilentMode(false);		
+		
+		NPAEntry fileEntry = null;
+		
+		if ((fileEntry = file.getEntryByFileName(archivefile)) == null) {
+			out("File "+archivefile+" not found.\nExiting.\n");
+			System.exit(1);	
+		}
+		
+		if (!file.extractFile(fileEntry, archivefile)) {
+			out("An error occured while extracting files.\nExiting.\n");
+			errorHandler(file);
+			System.exit(1);
+		} else {
+			out("Done.");
+			System.exit(1);
+			return;
 		}
 	}
 	
@@ -122,13 +197,18 @@ public class Main {
 		file.setSilentMode(false);
 		
 		if (!file.readHeader()) {
-			out("Error: Couldn't read npa header\nExiting.\n");
+			out("Error: Couldn't read NPA header\nExiting.\n");
+			errorHandler(file);
 			System.exit(1);
 		} else {
 			out("Successfully read NPA header\n");
 	    }
+		
+		file.setSilentMode(true);
+		
 		if(!file.readAllEntries()) {
 			out("Error: Couldn't read fileheaders.\nExiting.\n");
+			errorHandler(file);
 			System.exit(1);
 		} else {
 			out("Successfully read "+file.getLoadedEntries().size()+" fileheaders.\n");
@@ -158,7 +238,8 @@ public class Main {
 		file.setSilentMode(false);
 		
 		if (!file.readHeader()) {
-			out("Error: Couldn't read npa header\nExiting.\n");
+			out("Error: Couldn't read header\nExiting.\n");
+			errorHandler(file);
 			System.exit(1);
 		} 
 		out("Successfully read NPA header.\n\n");
@@ -186,20 +267,22 @@ public class Main {
 		file.setSilentMode(false);
 		
 		if (!file.readHeader()) {
-			out("Error: Couldn't read npa header\nExiting.\n");
+			out("Error: Couldn't read header\nExiting.\n");
+			errorHandler(file);
 			System.exit(1);
 		} else {
 			out("Successfully read NPA header.\n");
 		}
 		if(!file.readAllEntries()) {
 			out("Error: Couldn't read file header\nExiting.\n");
+			errorHandler(file);
 			System.exit(1);
 		} else {
 			out("Successfully read "+file.getLoadedEntries().size()+" fileheaders.\n");
 		}
 		
 		file.setSilentMode(true);
-		file.setExtensiveMode(false);
+		file.setExtensiveMode(true);
 		
 		if (filename.contains(".")) {
 			String[] elements = filename.split("\\.");
@@ -212,11 +295,12 @@ public class Main {
 				}
 			}
 		} else {
-			filename = "_"+filename;
+			filename = filename+"_";
 		}
 		
 		if (!file.extractAll(filename)) {
 			out("An error occured while extracting files.\nExiting.\n");
+			errorHandler(file);
 			System.exit(1);
 		} else {
 			return;
@@ -254,11 +338,10 @@ public class Main {
 			System.out.println("Done.");
 		} else {
 			System.out.println("Error: Couldn't create archive "+filename);
+			errorHandler(file);
 			System.exit(1);
 		}
 	}
 	
-	private static void out(String str) {
-		System.out.print(str);
-	}
+	private static void out(String str) { System.out.print(str); } //Just a little shortcut...
 }
