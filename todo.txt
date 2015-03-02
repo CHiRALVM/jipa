@@ -1,11 +1,9 @@
 TODO for jipa/NPALib
 
-Known Issues:
-	* Extracting a single file is still broken ( -xfg, confirmed; -xf, unsure)
-	* Error logging delivers almost no information
 Planned Improvements:
-	* Fixing Exceptionhandling
+	* Fixing Exception handling
 Planned Features:
+	+ Improve/Add Support for Django and Lamento
 	+ Implement GUI (Probably as a fork)
 	
-4 changes planned.
+3 changes planned.
