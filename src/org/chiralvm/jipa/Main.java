@@ -12,11 +12,11 @@ import org.chiralvm.libraries.NPAFormat.NPALibrary;
 
 
 public class Main {
-	public final static String VERSION = "v0.1.1";
+	public final static String VERSION = "v0.1.2";
 	
 	public static void main(String[] args) throws UnsupportedEncodingException {
 		
-		out("jipa "+VERSION+" by spycrab0\nNipa rewritten in Java with some extra features.\n");
+		out("jipa "+VERSION+" (c) spycrab0\nNipa rewritten in Java with some extra features.\n");
 		out("Using NPALibrary v"+NPALibrary.VERSION+" (API: v"+NPALibrary.API_VERSION+")\n\n");
 		out("This program is based on docs and source code provided by Moogy (http://tsukuru.info/nipa/)\nThis program is licensed under the GNU General Public License v3.\n\n");
 		
@@ -53,16 +53,7 @@ public class Main {
 				extractNPA(args[1],null);
 				return;
 			}
-			
-			if (args[0].equals("-xf")) {
-				if (args.length != 3) {
-					out("Invalid argument count.\nSee -h for further help.\n");
-					System.exit(1);
-				}
-				extractSingleFile(args[1],args[2],null);
-				return;
-			}
-			
+	
 			if (args[0].equals("-l")) {
 				if (args.length != 2) {
 					out("Invalid argument count.\nSee -h for further help.\n");
@@ -113,12 +104,22 @@ public class Main {
 					out("Invalid argument count.\nSee -h for further help.\n");
 					System.exit(1);
 				}
-				extractSingleFile(args[1],args[2],(args.length == 3 ? args[2] : "ChaosHead"));
+				extractSingleFile(args[1],args[2],(args.length == 4 ? args[3] : "ChaosHead"));
+				return;
+			}
+			
+			
+			
+			if (args[0].equals("-xf")) {
+				if (args.length != 3) {
+					out("Invalid argument count.\nSee -h for further help.\n");
+					System.exit(1);
+				}
+				extractSingleFile(args[1],args[2],null);
 				return;
 			}
 			
 			System.out.println("Unknown argument.\nSee -h for further help.\n");
-			showHelp();
 			System.exit(1);
 		} else {
 			showHelp();
@@ -134,26 +135,18 @@ public class Main {
 		}
 	}
 	
-	private static void errorHandler(NPAFile file) {
-		if (file.getExceptions().size() != 0) {
-			System.out.println("Writing exceptions to error.log");
-			file.createErrorLog("error.log", "Nipa v"+VERSION+" "+NPALibrary.VERSION+" (API: v"+NPALibrary.API_VERSION+")");
-		}
-	}
-	
 	private static void extractSingleFile(String filename,String archivefile,String encryption) {
 		NPAFile file;
 
-		if (encryption == null) { file = new NPAFile(new File(filename)); } else { file = new NPAFile(new File(filename),EncryptionKey.valueOf(encryption)); }
-		
+		System.out.println(encryption);
 		if (encryption == null) { file = new NPAFile(new File(filename)); } else { file = new NPAFile(new File(filename),EncryptionKey.valueOf(encryption)); }
 		
 		file.setExtensiveMode(false);
 		file.setSilentMode(false);
+		if (file.getEncryptionKey() != null) System.out.println(file.getEncryptionKey().getName());
 		
 		if (!file.readHeader()) {
 			out("Error: Couldn't read npa header\nExiting.\n");
-			errorHandler(file);
 			System.exit(1);
 		} else {
 			out("Successfully read NPA header.\n");
@@ -162,7 +155,6 @@ public class Main {
 		file.setSilentMode(true);
 		if(!file.readAllEntries()) {
 			out("Error: Couldn't read file header\nExiting.\n");
-			errorHandler(file);
 			System.exit(1);
 		} else {
 			out("Successfully read "+file.getLoadedEntries().size()+" fileheaders.\n");
@@ -170,16 +162,15 @@ public class Main {
 		
 		file.setSilentMode(false);		
 		
-		NPAEntry fileEntry = null;
+		NPAEntry fileEntry = file.getEntryByFileName(archivefile);
 		
-		if ((fileEntry = file.getEntryByFileName(archivefile)) == null) {
+		if (fileEntry == null) {
 			out("File "+archivefile+" not found.\nExiting.\n");
 			System.exit(1);	
 		}
 		
-		if (!file.extractFile(fileEntry, archivefile)) {
+		if (!file.extractEntry(fileEntry, ".")) {
 			out("An error occured while extracting files.\nExiting.\n");
-			errorHandler(file);
 			System.exit(1);
 		} else {
 			out("Done.");
@@ -198,7 +189,6 @@ public class Main {
 		
 		if (!file.readHeader()) {
 			out("Error: Couldn't read NPA header\nExiting.\n");
-			errorHandler(file);
 			System.exit(1);
 		} else {
 			out("Successfully read NPA header\n");
@@ -208,7 +198,6 @@ public class Main {
 		
 		if(!file.readAllEntries()) {
 			out("Error: Couldn't read fileheaders.\nExiting.\n");
-			errorHandler(file);
 			System.exit(1);
 		} else {
 			out("Successfully read "+file.getLoadedEntries().size()+" fileheaders.\n");
@@ -239,7 +228,6 @@ public class Main {
 		
 		if (!file.readHeader()) {
 			out("Error: Couldn't read header\nExiting.\n");
-			errorHandler(file);
 			System.exit(1);
 		} 
 		out("Successfully read NPA header.\n\n");
@@ -268,20 +256,18 @@ public class Main {
 		
 		if (!file.readHeader()) {
 			out("Error: Couldn't read header\nExiting.\n");
-			errorHandler(file);
 			System.exit(1);
 		} else {
 			out("Successfully read NPA header.\n");
 		}
 		if(!file.readAllEntries()) {
 			out("Error: Couldn't read file header\nExiting.\n");
-			errorHandler(file);
 			System.exit(1);
 		} else {
 			out("Successfully read "+file.getLoadedEntries().size()+" fileheaders.\n");
 		}
 		
-		file.setSilentMode(true);
+		file.setSilentMode(false);
 		file.setExtensiveMode(true);
 		
 		if (filename.contains(".")) {
@@ -300,7 +286,6 @@ public class Main {
 		
 		if (!file.extractAll(filename)) {
 			out("An error occured while extracting files.\nExiting.\n");
-			errorHandler(file);
 			System.exit(1);
 		} else {
 			return;
@@ -338,7 +323,6 @@ public class Main {
 			System.out.println("Done.");
 		} else {
 			System.out.println("Error: Couldn't create archive "+filename);
-			errorHandler(file);
 			System.exit(1);
 		}
 	}

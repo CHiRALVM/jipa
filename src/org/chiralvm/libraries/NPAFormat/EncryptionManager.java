@@ -1,5 +1,7 @@
 package org.chiralvm.libraries.NPAFormat;
 
+import java.io.UnsupportedEncodingException;
+
 public class EncryptionManager {
 	private int k1=0,k2=0;
 	private EncryptionKey encryptionKey;
@@ -50,7 +52,6 @@ public class EncryptionManager {
 		int key=0;
 		int i=0; 
 		
-		
 		if (encryptionKey.equals(EncryptionKey.DramaticalMurder) || 
 				encryptionKey.equals(EncryptionKey.Kikokugai) ||
 				encryptionKey.equals(EncryptionKey.Sonicomi_retail) ||
@@ -62,9 +63,12 @@ public class EncryptionManager {
 			key1 = 0x87654321;
 		}
 		
-		for (i = 0;i < entry.getOriginalName().toCharArray().length;i++) {
-			key1 -= entry.getOriginalName().toCharArray()[i];
-		}
+		try {
+			byte[] orgName = entry.getOriginalName().getBytes("SJIS");
+			for (i = 0;i < orgName.length;i++) {
+				key1 -= orgName[i];
+			}
+		} catch (UnsupportedEncodingException ex) {}
 		
 		key = key1 * i;
 		

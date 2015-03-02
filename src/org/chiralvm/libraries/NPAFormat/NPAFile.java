@@ -1,14 +1,12 @@
 package org.chiralvm.libraries.NPAFormat;
 
 import java.io.BufferedInputStream;
-import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
@@ -25,7 +23,6 @@ public class NPAFile {
 	private EncryptionManager enc;
 	private CReader hr,fr;
 	private boolean extensive=false,silent=true;
-	private ArrayList<StackTraceElement[]> exceptionst = new ArrayList<>();
 	private ArrayList<NPAEntry> loadedEntries = new ArrayList<NPAEntry>();
 	private EncryptionKey encryptionKey;
 	private int k1,k2,compress,encrypt,totalCount,folderCount,fileCount,_null,start; //Header information
@@ -53,7 +50,7 @@ public class NPAFile {
 	
 	//Modes
 	public void setSilentMode(boolean silent) { this.silent=silent; }
-	public void setExtensiveMode(boolean extensive) { this.extensive=extensive; }
+	public void setExtensiveMode(boolean extensive) { this.extensive=extensive;this.silent=(extensive ? true : silent); }
 	public boolean silentMode() { return silent; }
 	public boolean extensiveMode() { return extensive; }
 	
@@ -62,11 +59,13 @@ public class NPAFile {
 	 * 
 	 * @param entry entry to be extracted
 	 * @param dst filename (e.g. 'abc.txt')
-	 * @return dst destination path (e.g. 'abc.txt')
+	 * @return exit code
 	 */
 	public boolean extractFile(NPAEntry entry,String dst) {
+		if (encryptionKey == null) return false;
 		try {
 	    fr = new CReader(new FileInputStream(file)); //Init Reader
+	    new File(dst).createNewFile();
 		OutputStream os = new FileOutputStream(new File(dst)); //Init Writer
 		
 		fr.skip(entry.getOffset()+start+0x29); //Jumping to file start
@@ -78,27 +77,28 @@ public class NPAFile {
 			
 			int key = enc.fCrypt(entry);
 			int len = 0x1000;
-			int[] buffer = fr.readUnsignedBytes(size);
+			int[] buffer = fr.readUnsignedBytes(size);			
+			byte[] tbuf = new byte[size];
+			int stop = 0;
+			if (!encryptionKey.equals(EncryptionKey.Lamento) && !encryptionKey.equals(EncryptionKey.LamentoTrial)) {
+				len += entry.getOriginalName().getBytes("SJIS").length;
+			}
 			
-			if (encryptionKey.equals(EncryptionKey.Django)) {
-				len += entry.getName().length();
+			for (int i = 0;i < buf.length;i++) {
+				buf[i] = (byte) buffer[i];
 			}
 			
 			for (int i = 0;i < buffer.length && i < len;i++) {
-				
 				int ptr = buffer[i];
-				
 				buffer[i] = ((encryptionKey.getKey()[ptr]-key)-i); //Decrypting the byte
-				 
 				int value=buffer[i];
-				
-				while (value < 0) { value += 256; } //Making the byte unsigned for dummies
-				
-				buffer[i] = value;
+				while (value < 0) { value += 256; } //Fixing the byte
+				tbuf[i] = (byte) value;
+				stop++;
 			}
-									
-			for (int i = 0;i < buffer.length;i++) {
-				buf[i] = (byte) buffer[i];
+			
+			for (int i = 0;i < stop;i++) {
+				buf[i] = tbuf[i];
 			}
 			
 		} else {
@@ -107,27 +107,36 @@ public class NPAFile {
 				buf[i] = (byte) buffer[i];
 			}
 		}
-		
 		if (compress == 1) {
-			Inflater inf = new Inflater();
+			Inflater inf = new Inflater(false);
 			inf.setInput(buf);
 			
 			ByteArrayOutputStream out = new ByteArrayOutputStream(buf.length);  
 			byte[] uc_buf = new byte[1024]; //Compression buffer
 			
-			while (!inf.finished()) {
+			
+			while (inf.getRemaining() != 0) {
 				try {
 					int c = inf.inflate(uc_buf);
 					out.write(uc_buf,0,c);
+					out.flush();
 				} catch (DataFormatException e) {
 					if (!silent) System.out.println("Error while uncompressing!");
 					e.printStackTrace();
-					exceptionst.add(e.getStackTrace());
 					return false;
 				}
 			}
 			
 			byte[] uncompressed = out.toByteArray();
+			
+			if (entry.getSize() != uncompressed.length) {
+				if (!silent) {
+					System.out.println("Expected "+entry.getSize()+" instead got "+uncompressed.length);
+					System.out.println(entry.getName());
+				}
+				return false;
+			}
+			
 			os.write(uncompressed); //Writing uncompressed data
 			
 			out.close();
@@ -142,8 +151,7 @@ public class NPAFile {
 		
 		} catch (IOException io) {
 			if (!silent) System.out.println("Error while reading "+entry.getName()+"!");
-			if (!silent && extensive) io.printStackTrace();
-			exceptionst.add(io.getStackTrace());
+			if (!silent) io.printStackTrace();
 			return false;
 		}
 		return true;
@@ -165,17 +173,6 @@ public class NPAFile {
 		
 		return entryList;
 	}
-	
-	/**
-	 * Get Exceptions
-	 * 
-	 * @return Returns all exceptions that occured
-	 */
-	
-	public ArrayList<StackTraceElement[]> getExceptions() {
-		return exceptionst;
-	}
-	
 	
 	/**
 	 * Extracts an single entry from the NPA file
@@ -208,7 +205,7 @@ public class NPAFile {
 		String path = (dst.endsWith(File.separator)) ? dst : dst+File.separator;
 		
 			if (entry.isFile()) {
-				extractFile(entry,path+entry.getName());
+				if (!extractFile(entry,path+entry.getName())) return false;
 			} else if (entry.isDirectory()) {
 				if (!new File(path+entry.getName()).mkdirs() && (!new File(path+entry.getName()).exists() && !new File(path+entry.getName()).isDirectory())) {
 					if (!silent) System.out.println("Failed to create directory '"+path+entry.getName()+"'");
@@ -217,9 +214,6 @@ public class NPAFile {
 			} else {
 				if (!silent) System.out.println(entry.getName()+": unknown entry type.");
 			}
-			if (!silent && extensive) System.out.println(path+entry.getName());
-
-			if (!silent) System.out.println("Done.");
 		return true;
 	}
 	
@@ -231,7 +225,7 @@ public class NPAFile {
 	 */
 	public boolean extractAll(String dst) {	
 		if (!silent) System.out.print("Extracting...\n\n");
-		
+		if (!new File(dst).exists()) new File(dst).mkdir();
 		int files=0,dirs=0;
 		for (NPAEntry entry : loadedEntries) {
 			if (entry.isFile()) files++;
@@ -323,9 +317,8 @@ public class NPAFile {
 				return false;
 			}
 		} catch (IOException io) {
-			if (!silent && extensive) io.printStackTrace();
+			if (!silent) io.printStackTrace();
 			if (!silent) System.out.println("An IO Exception occured.");
-			exceptionst.add(io.getStackTrace());
 			return false;
 		}
 	}
@@ -390,8 +383,8 @@ public class NPAFile {
 			fileSize = hr.readDWord();
 			
 			} catch(IOException io) {
+				if (!silent) io.printStackTrace();
 				if (!silent) System.out.println("IO Exception occured while parsing file: "+i);
-				exceptionst.add(io.getStackTrace());
 				return false;
 			}
 			
@@ -482,9 +475,8 @@ public class NPAFile {
 				deflater.finish();
 				entry.setCSize(deflater.deflate(zbuffer));
 				} catch (IOException io) {
-					if (!silent && extensive) io.printStackTrace();
+					if (!silent) io.printStackTrace();
 					if (!silent) System.out.println("IOException occured :/");
-					exceptionst.add(io.getStackTrace());
 				}
 		} else {
 			if (isFile) entry.setCSize((int) new File(path).length());
@@ -500,9 +492,8 @@ public class NPAFile {
 		try {
 			start += entry.getOriginalName().getBytes("SJIS").length;
 		} catch (UnsupportedEncodingException e) {
-			if (!silent && extensive) e.printStackTrace();
+			if (!silent) e.printStackTrace();
 			if (!silent) System.out.println("SJIS is not supported");
-			exceptionst.add(e.getStackTrace());
 		}
 		
 		if (totalCount > 0) {
@@ -517,7 +508,7 @@ public class NPAFile {
 	private void parseDirectory(File directory) {
 		int curid=id++;
 	    for (File f : directory.listFiles()) {
-	    	if (!silent && extensive) System.out.println(f.getAbsolutePath());
+	    	if (!silent) System.out.println(f.getAbsolutePath());
 	    	if (!f.isHidden()) {
 	    		addEntry(f.getPath(),f.getName(),f.isFile(),curid,subdir);
 	    		if (f.isDirectory()) subdir++;
@@ -661,60 +652,13 @@ public class NPAFile {
 			
 			return true;
 		} catch (FileNotFoundException e) {
+			if (!silent) e.printStackTrace();
 			if (!silent) System.out.println("Error while writing archive: Couldn't locate file.");
-			e.printStackTrace();
-			exceptionst.add(e.getStackTrace());
 			return false;
 		} catch (IOException e) {
+			if (!silent) e.printStackTrace();
 			if (!silent) System.out.println("Error while writing file: Failed to create file.");
-			e.printStackTrace();
-			exceptionst.add(e.getStackTrace());
 			return false;
 		}
-	}
-	
-	/**
-	 * Create error log
-	 * 
-	 * @param dst Error log
-	 * @return exit code
-	 */
-	
-	public boolean createErrorLog(String filename,String introStr) {
-		File file = new File(filename);
-		
-		if (file.exists()) {
-			System.out.println("Can't create "+filename+": Already exists");
-			return false;
-		}
-		if (!file.canWrite()) {
-			System.out.println("Can't create "+filename+": Not allowed to write");
-			return false;
-		}
-		
-		try {
-		
-		BufferedWriter bw = new BufferedWriter(new FileWriter(file));
-		
-		bw.write(introStr+"\n\n");
-		
-		bw.write("Exceptions:\n\n");
-		for (int i = 0;i < exceptionst.size();i++) {
-			bw.write(i+":\n");
-			for (StackTraceElement element : exceptionst.get(i)) {
-				bw.write(element.getMethodName()+" ("+element.getFileName()+":"+element.getLineNumber()+")\n");
-			}
-		}
-		
-		bw.flush();
-		bw.close();
-		
-		} catch (IOException io) {
-			System.out.println("Failed to write error log.");
-			io.printStackTrace();
-			return false;
-		}
-		
-		return true;
 	}
 }

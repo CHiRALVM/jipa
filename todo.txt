@@ -1,11 +1,11 @@
 TODO for jipa/NPALib
 
-Fixes:
-	NPAFile.java:
-		* Made a big mess today, better clean that up:
-			 * Check if the exception handling is accurate
-			 * Comment some code
+Known Issues:
+	* Extracting a single file is still broken ( -xfg, confirmed; -xf, unsure)
+	* Error logging delivers almost no information
+Planned Improvements:
+	* Fixing Exceptionhandling
 Planned Features:
 	+ Implement GUI (Probably as a fork)
 	
-3 changes planned.
+4 changes planned.
