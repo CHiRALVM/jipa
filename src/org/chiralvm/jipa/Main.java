@@ -138,12 +138,10 @@ public class Main {
 	private static void extractSingleFile(String filename,String archivefile,String encryption) {
 		NPAFile file;
 
-		System.out.println(encryption);
 		if (encryption == null) { file = new NPAFile(new File(filename)); } else { file = new NPAFile(new File(filename),EncryptionKey.valueOf(encryption)); }
 		
 		file.setExtensiveMode(false);
 		file.setSilentMode(false);
-		if (file.getEncryptionKey() != null) System.out.println(file.getEncryptionKey().getName());
 		
 		if (!file.readHeader()) {
 			out("Error: Couldn't read npa header\nExiting.\n");
